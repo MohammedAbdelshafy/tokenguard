@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "mbm-tokenguard"
 version = "0.1.0"
 description = "API spend guardrails: per-key / per-project monthly budgets, usage ingestion, threshold alerts, and a hard-stop enforcement hook."
+authors = [{name = "Mohammed Abdelshafy"}]
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.9"
