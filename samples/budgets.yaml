@@ -1,0 +1,24 @@
+# Sample TokenGuard budgets — referenced by tests/test_tokenguard.py and docs.
+# Monthly spend caps per API key and per project (USD), alert thresholds,
+# and the price table used to cost token-based usage events.
+alert_at:
+  - 0.8
+  - 0.95
+keys:
+  sk-sample-001:
+    monthly_usd: 50
+  sk-sample-002:
+    monthly_usd: 10
+  sk-sample-003:
+    monthly_usd: 100
+projects:
+  demo-app:
+    monthly_usd: 200
+prices:
+  default:
+    input_per_1k: 0.0015
+    output_per_1k: 0.006
+  models:
+    gpt-4o-mini:
+      input_per_1k: 0.00015
+      output_per_1k: 0.0006

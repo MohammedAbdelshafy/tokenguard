@@ -3,6 +3,6 @@ __pycache__/
 *.egg-info/
 .tokenguard/
 ledger.jsonl
-budgets.yaml
-budgets.json
+/budgets.yaml
+/budgets.json
 .DS_Store
