@@ -1,6 +1,7 @@
 """Usage-event ingestion into a local append-only JSONL ledger."""
 
 import json
+import math
 import os
 from datetime import datetime, timezone
 
@@ -48,27 +49,54 @@ def parse_timestamp(value):
     raise LedgerError("invalid timestamp: %r" % (value,))
 
 
-def event_cost_usd(event, prices):
+def _as_number(value, what, source, lineno):
+    """Coerce value to a finite float.
+
+    Rejects booleans (float(True) == 1.0 would silently invent spend),
+    non-numeric values, and NaN/inf (a NaN cost poisons every total it
+    touches, and inf is not a real spend figure).
+    """
+    if isinstance(value, bool):
+        raise PriceError(
+            "%s line %d: %s must be a number, got %r"
+            % (source, lineno, what, value)
+        )
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        raise PriceError(
+            "%s line %d: %s must be a number, got %r"
+            % (source, lineno, what, value)
+        )
+    if not math.isfinite(number):
+        raise PriceError(
+            "%s line %d: %s must be finite, got %r"
+            % (source, lineno, what, value)
+        )
+    return number
+
+
+def event_cost_usd(event, prices, source, lineno):
     """Return the event cost in USD.
 
     Uses cost_usd when present, otherwise computes it from tokens_in /
     tokens_out with the price table (per-model entry, else default).
+    Token counts must be non-negative; an explicit cost_usd may be
+    negative (models a provider credit/adjustment).
     """
     raw_cost = event.get("cost_usd")
     if raw_cost is not None:
-        try:
-            return float(raw_cost)
-        except (TypeError, ValueError):
-            raise PriceError("cost_usd must be a number, got %r" % (raw_cost,))
-    tokens_in = event.get("tokens_in") or 0
-    tokens_out = event.get("tokens_out") or 0
-    try:
-        tokens_in = float(tokens_in)
-        tokens_out = float(tokens_out)
-    except (TypeError, ValueError):
+        return _as_number(raw_cost, "cost_usd", source, lineno)
+    tokens_in = _as_number(
+        event.get("tokens_in") or 0, "tokens_in", source, lineno
+    )
+    tokens_out = _as_number(
+        event.get("tokens_out") or 0, "tokens_out", source, lineno
+    )
+    if tokens_in < 0 or tokens_out < 0:
         raise PriceError(
-            "tokens_in/tokens_out must be numbers, got %r / %r"
-            % (event.get("tokens_in"), event.get("tokens_out"))
+            "%s line %d: tokens_in/tokens_out must be >= 0, got %r / %r"
+            % (source, lineno, event.get("tokens_in"), event.get("tokens_out"))
         )
     model = event.get("model")
     entry = None
@@ -78,8 +106,9 @@ def event_cost_usd(event, prices):
         entry = (prices or {}).get("default")
     if entry is None:
         raise PriceError(
-            "no cost_usd and no price available for model %r "
-            "(add a prices.default entry to the config)" % (model,)
+            "%s line %d: no cost_usd and no price available for model %r "
+            "(add a prices.default entry to the config)"
+            % (source, lineno, model)
         )
     return (
         tokens_in / 1000.0 * entry["input_per_1k"]
@@ -91,8 +120,14 @@ def load_ledger(path):
     """Read ledger events. Missing file -> empty list."""
     events = []
     if not os.path.isfile(path):
+        if os.path.exists(path):
+            raise LedgerError("ledger path is not a file: %s" % path)
         return events
-    with open(path, "r", encoding="utf-8") as fh:
+    try:
+        fh = open(path, "r", encoding="utf-8")
+    except OSError as exc:
+        raise LedgerError("cannot read ledger %s: %s" % (path, exc))
+    with fh:
         for lineno, line in enumerate(fh, 1):
             line = line.strip()
             if not line:
@@ -124,7 +159,7 @@ def normalize_event(raw, prices, source, lineno):
             "%s line %d: need at least one of 'key' or 'project'"
             % (source, lineno)
         )
-    cost = event_cost_usd(raw, prices)
+    cost = event_cost_usd(raw, prices, source, lineno)
     event = {
         "timestamp": raw["timestamp"],
         "key": str(key) if key is not None else None,
@@ -146,9 +181,14 @@ def ingest_file(source_path, ledger_path, prices):
     (ingested_count, skipped_count, warnings).
     """
     if not os.path.isfile(source_path):
+        if os.path.exists(source_path):
+            raise LedgerError("usage path is not a file: %s" % source_path)
         raise LedgerError("usage file not found: %s" % source_path)
-    with open(source_path, "r", encoding="utf-8") as fh:
-        raw_lines = fh.read().splitlines()
+    try:
+        with open(source_path, "r", encoding="utf-8") as fh:
+            raw_lines = fh.read().splitlines()
+    except OSError as exc:
+        raise LedgerError("cannot read usage file %s: %s" % (source_path, exc))
 
     existing_ids = {
         e.get("id") for e in load_ledger(ledger_path) if e.get("id") is not None
@@ -188,9 +228,14 @@ def ingest_file(source_path, ledger_path, prices):
 
     if new_events:
         directory = os.path.dirname(os.path.abspath(ledger_path))
-        os.makedirs(directory, exist_ok=True)
-        with open(ledger_path, "a", encoding="utf-8") as fh:
-            for event in new_events:
-                fh.write(json.dumps(event, sort_keys=True) + "\n")
+        try:
+            os.makedirs(directory, exist_ok=True)
+            with open(ledger_path, "a", encoding="utf-8") as fh:
+                for event in new_events:
+                    fh.write(json.dumps(event, sort_keys=True) + "\n")
+        except OSError as exc:
+            raise LedgerError(
+                "cannot append to ledger %s: %s" % (ledger_path, exc)
+            )
 
     return len(new_events), skipped, warnings

@@ -32,6 +32,17 @@ def build_parser():
             "API spend guardrails: enforce per-key / per-project monthly "
             "budgets with alerts and hard stops."
         ),
+        epilog=(
+            "examples:\n"
+            "  tokenguard ingest usage.jsonl\n"
+            "  tokenguard check\n"
+            "  tokenguard check --month 2026-09 --key sk-live-abc\n"
+            "  tokenguard guard -- python3 expensive_job.py\n"
+            "\n"
+            "exit codes: 0 = within budget, 2 = budget breached, "
+            "1 = config/usage error"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         "--version", action="version", version="tokenguard %s" % __version__
@@ -158,7 +169,8 @@ def _run_check(args):
     if not os.path.isfile(ledger_path):
         print(
             "tokenguard: note: ledger %s not found, treating spend as $0"
-            % ledger_path
+            % ledger_path,
+            file=sys.stderr,
         )
 
     key_totals, project_totals = totals_for_month(events, year, month)

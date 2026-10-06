@@ -18,7 +18,12 @@ from tokenguard.evaluate import (  # noqa: E402
     render_breach_lines,
     totals_for_month,
 )
-from tokenguard.ledger import ingest_file, load_ledger  # noqa: E402
+from tokenguard.ledger import (  # noqa: E402
+    LedgerError,
+    PriceError,
+    ingest_file,
+    load_ledger,
+)
 
 MONTH = "2026-09"
 
@@ -432,6 +437,235 @@ class CliTest(unittest.TestCase):
             self.assertEqual(proc.returncode, 2, proc.stderr)
             self.assertIn("ALERT", proc.stdout)  # sk-sample-001 at 92%
             self.assertIn("BREACH", proc.stdout)  # sk-sample-002 at 125%
+
+
+class ConfigNumberValidationTest(unittest.TestCase):
+    """monthly_usd / prices / alert_at must be finite numbers, not bools."""
+
+    def test_nan_inf_budgets_rejected(self):
+        for bad in (float("nan"), float("inf"), float("-inf")):
+            with self.assertRaises(ConfigError, msg="budget %r" % (bad,)):
+                Config({"keys": {"k": {"monthly_usd": bad}}}, "test")
+            with self.assertRaises(
+                ConfigError, msg="project budget %r" % (bad,)
+            ):
+                Config({"projects": {"p": {"monthly_usd": bad}}}, "test")
+
+    def test_bool_budgets_rejected(self):
+        for bad in (True, False):
+            with self.assertRaises(ConfigError, msg="budget %r" % (bad,)):
+                Config({"keys": {"k": {"monthly_usd": bad}}}, "test")
+
+    def test_nan_inf_prices_rejected(self):
+        for bad in (float("nan"), float("inf")):
+            with self.assertRaises(ConfigError, msg="price %r" % (bad,)):
+                Config(
+                    {
+                        "prices": {
+                            "default": {
+                                "input_per_1k": bad,
+                                "output_per_1k": 0.0,
+                            }
+                        }
+                    },
+                    "test",
+                )
+
+    def test_bool_prices_rejected(self):
+        with self.assertRaises(ConfigError):
+            Config(
+                {
+                    "prices": {
+                        "default": {
+                            "input_per_1k": True,
+                            "output_per_1k": 0.0,
+                        }
+                    }
+                },
+                "test",
+            )
+
+    def test_bool_alert_threshold_rejected(self):
+        with self.assertRaises(ConfigError):
+            Config({"alert_at": [True]}, "test")
+
+    def test_numeric_strings_still_accepted(self):
+        cfg = Config({"keys": {"k": {"monthly_usd": "50"}}}, "test")
+        self.assertEqual(cfg.keys["k"], 50.0)
+
+    def test_nan_budget_rejected_from_yaml(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "budgets.yaml")
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write("keys:\n  k:\n    monthly_usd: nan\n")
+            with self.assertRaises(ConfigError):
+                load_config(path)
+
+
+class LedgerNumberValidationTest(unittest.TestCase):
+    def _ingest_lines(self, tmp, lines):
+        make_config(tmp)
+        ledger = os.path.join(tmp, "ledger.jsonl")
+        cfg = load_config(os.path.join(tmp, "budgets.yaml"))
+        path = os.path.join(tmp, "usage.jsonl")
+        with open(path, "w", encoding="utf-8") as fh:
+            for line in lines:
+                fh.write(line + "\n")
+        return ingest_file(path, ledger, cfg.prices), ledger
+
+    def test_negative_tokens_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (ingested, skipped, warnings), _ = self._ingest_lines(
+                tmp,
+                [
+                    json.dumps(
+                        {
+                            "timestamp": "2026-09-01T00:00:00Z",
+                            "key": "key-A",
+                            "tokens_in": -100,
+                            "tokens_out": 0,
+                            "model": "gpt-4o-mini",
+                        }
+                    )
+                ],
+            )
+            self.assertEqual(ingested, 0)
+            self.assertEqual(skipped, 1)
+            self.assertTrue(any(">= 0" in w for w in warnings), warnings)
+
+    def test_bool_cost_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (ingested, skipped, warnings), _ = self._ingest_lines(
+                tmp,
+                [
+                    json.dumps(
+                        {
+                            "timestamp": "2026-09-01T00:00:00Z",
+                            "key": "key-A",
+                            "cost_usd": True,
+                        }
+                    )
+                ],
+            )
+            self.assertEqual(ingested, 0)
+            self.assertEqual(skipped, 1)
+            self.assertTrue(
+                any("must be a number" in w for w in warnings), warnings
+            )
+
+    def test_nan_inf_cost_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (ingested, skipped, warnings), ledger = self._ingest_lines(
+                tmp,
+                [
+                    # json allows NaN/Infinity literals via python's encoder
+                    '{"timestamp": "2026-09-01T00:00:00Z", "key": "key-A", "cost_usd": NaN}',
+                    '{"timestamp": "2026-09-01T00:00:00Z", "key": "key-A", "cost_usd": Infinity}',
+                ],
+            )
+            self.assertEqual(ingested, 0)
+            self.assertEqual(skipped, 2)
+            self.assertTrue(
+                any("must be finite" in w for w in warnings), warnings
+            )
+            self.assertEqual(load_ledger(ledger), [])
+
+    def test_negative_cost_allowed_as_credit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (ingested, skipped, _), ledger = self._ingest_lines(
+                tmp,
+                [
+                    json.dumps(
+                        {
+                            "timestamp": "2026-09-01T00:00:00Z",
+                            "key": "key-A",
+                            "cost_usd": -2.5,
+                        }
+                    )
+                ],
+            )
+            self.assertEqual((ingested, skipped), (1, 0))
+            events = load_ledger(ledger)
+            self.assertEqual(events[0]["cost_usd"], -2.5)
+
+
+class LedgerFileErrorTest(unittest.TestCase):
+    def test_ingest_to_directory_ledger_is_clean_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            usage = write_usage(
+                tmp,
+                [evt("2026-09-01T00:00:00Z", key="key-A", cost=1.0)],
+            )
+            with self.assertRaises(LedgerError) as ctx:
+                ingest_file(
+                    usage, tmp, {"default": None, "models": {}}  # tmp is a dir
+                )
+            # load_ledger's directory guard fires first during dedupe;
+            # either way it must be a clean LedgerError, not a traceback
+            self.assertIn("not a file", str(ctx.exception))
+
+    def test_ingest_from_directory_source_is_clean_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(LedgerError) as ctx:
+                ingest_file(tmp, os.path.join(tmp, "l.jsonl"), {})
+            self.assertIn("not a file", str(ctx.exception))
+
+    def test_load_ledger_on_directory_raises(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(LedgerError):
+                load_ledger(tmp)
+
+    def test_load_ledger_missing_file_still_empty(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(
+                load_ledger(os.path.join(tmp, "nope.jsonl")), []
+            )
+
+
+class CliEdgeTest(unittest.TestCase):
+    def test_missing_ledger_note_goes_to_stderr(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            make_config(tmp)
+            # ledger.jsonl does not exist
+            proc = run_cli(tmp, "check", "--month", MONTH)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertIn("treating spend as $0", proc.stderr)
+            self.assertNotIn("treating spend as $0", proc.stdout)
+            self.assertIn("TokenGuard check", proc.stdout)
+
+    def test_help_shows_examples_and_exit_codes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            proc = run_cli(tmp, "--help")
+            self.assertEqual(proc.returncode, 0)
+            self.assertIn("examples:", proc.stdout)
+            self.assertIn("guard --", proc.stdout)
+            self.assertIn("exit codes:", proc.stdout)
+
+    def test_ingest_bad_numbers_warn_and_continue(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            make_config(tmp)
+            path = os.path.join(tmp, "usage.jsonl")
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(
+                    '{"timestamp": "2026-09-01T00:00:00Z", "key": "key-A", '
+                    '"cost_usd": true}\n'
+                )
+                fh.write(
+                    '{"timestamp": "2026-09-02T00:00:00Z", "key": "key-A", '
+                    '"cost_usd": 1.5}\n'
+                )
+            proc = run_cli(tmp, "ingest", "usage.jsonl")
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertIn("ingested 1 event(s)", proc.stdout)
+            self.assertIn("must be a number", proc.stderr)
+
+    def test_check_rejects_bool_budget_with_clear_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with open(os.path.join(tmp, "budgets.yaml"), "w") as fh:
+                fh.write("keys:\n  key-A:\n    monthly_usd: true\n")
+            proc = run_cli(tmp, "check", "--month", MONTH)
+            self.assertEqual(proc.returncode, 1)
+            self.assertIn("must be a number", proc.stderr)
 
 
 if __name__ == "__main__":

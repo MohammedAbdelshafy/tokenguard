@@ -1,6 +1,7 @@
 """Config loading for TokenGuard: budgets.yaml (or budgets.json)."""
 
 import json
+import math
 import os
 
 from . import yaml_subset
@@ -46,6 +47,29 @@ class Config:
         )
 
 
+def _as_number(value, what, source):
+    """Coerce a config value to a finite float.
+
+    Rejects booleans (float(True) == 1.0 would silently invent a $1 budget)
+    and NaN/inf (a NaN budget can never alert or breach).
+    """
+    if isinstance(value, bool):
+        raise ConfigError(
+            "config %s: %s must be a number, got %r" % (source, what, value)
+        )
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        raise ConfigError(
+            "config %s: %s must be a number, got %r" % (source, what, value)
+        )
+    if not math.isfinite(number):
+        raise ConfigError(
+            "config %s: %s must be finite, got %r" % (source, what, value)
+        )
+    return number
+
+
 def _budgets_section(section, name, source):
     if section is None:
         return {}
@@ -60,13 +84,9 @@ def _budgets_section(section, name, source):
                 "config %s: '%s.%s' must define monthly_usd"
                 % (source, name, entity)
             )
-        try:
-            amount = float(body["monthly_usd"])
-        except (TypeError, ValueError):
-            raise ConfigError(
-                "config %s: '%s.%s.monthly_usd' must be a number"
-                % (source, name, entity)
-            )
+        amount = _as_number(
+            body["monthly_usd"], "'%s.%s.monthly_usd'" % (name, entity), source
+        )
         if amount <= 0:
             raise ConfigError(
                 "config %s: '%s.%s.monthly_usd' must be > 0"
@@ -81,12 +101,7 @@ def _alert_thresholds(value, source):
         raise ConfigError("config %s: alert_at must be a list" % source)
     thresholds = []
     for item in value:
-        try:
-            t = float(item)
-        except (TypeError, ValueError):
-            raise ConfigError(
-                "config %s: alert_at entries must be numbers" % source
-            )
+        t = _as_number(item, "alert_at entries", source)
         if not 0 < t < 1:
             raise ConfigError(
                 "config %s: alert_at entries must be between 0 and 1 "
@@ -126,9 +141,13 @@ def _price_entry(entry, where, source):
     if not isinstance(entry, dict):
         raise ConfigError("config %s: %s must be a mapping" % (source, where))
     try:
-        in_price = float(entry["input_per_1k"])
-        out_price = float(entry["output_per_1k"])
-    except (KeyError, TypeError, ValueError):
+        in_price = _as_number(
+            entry["input_per_1k"], "%s.input_per_1k" % where, source
+        )
+        out_price = _as_number(
+            entry["output_per_1k"], "%s.output_per_1k" % where, source
+        )
+    except KeyError:
         raise ConfigError(
             "config %s: %s needs numeric input_per_1k and output_per_1k"
             % (source, where)

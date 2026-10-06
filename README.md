@@ -99,6 +99,23 @@ executed and TokenGuard exits `2` with a `REFUSED` message. Otherwise the
 command runs and its exit code is propagated. Use it to gate CI steps or
 cron jobs that spend API budget.
 
+## GitHub Action
+
+TokenGuard ships as a composite action (`v1` release):
+
+```yaml
+- uses: MohammedAbdelshafy/tokenguard@v1
+  with:
+    budgets: infra/tokenguard/budgets.yaml
+    command: python3 expensive_job.py   # optional; omitted = check only
+```
+
+It copies your budgets file into the action's checkout and runs
+`guard -- <command>` (or `check` when no command is given), failing the
+step on breach. Note: the ledger is local to the runner — a fresh CI job
+starts with zero spend unless an earlier step in the same job ingests
+usage into it (via `TOKENGUARD_LEDGER` / `tokenguard ingest`).
+
 ## Config reference (`budgets.yaml`, JSON also accepted)
 
 ```yaml
