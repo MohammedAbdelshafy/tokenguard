@@ -1,0 +1,32 @@
+name: 'TokenGuard'
+description: 'Gate CI jobs on AI API budgets: checks spend against budgets and fails the run on breach.'
+author: 'Mohammed Abdelshafy'
+branding:
+  icon: 'lock'
+  color: 'red'
+inputs:
+  budgets:
+    description: 'Path to your budgets.yaml, relative to your repo root'
+    required: true
+  command:
+    description: 'Command to run only if no budget is breached (optional)'
+    required: false
+    default: ''
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout TokenGuard
+      uses: actions/checkout@v4
+      with:
+        repository: MohammedAbdelshafy/tokenguard
+        path: _tokenguard
+    - name: Enforce budgets
+      shell: bash
+      run: |
+        cp "${{ github.workspace }}/${{ inputs.budgets }}" _tokenguard/budgets.yaml
+        cd _tokenguard
+        if [ -n "${{ inputs.command }}" ]; then
+          python3 -m tokenguard guard -- ${{ inputs.command }}
+        else
+          python3 -m tokenguard check
+        fi
