@@ -1,0 +1,6 @@
+{"id": "sample-evt-001", "timestamp": "2026-09-03T10:00:00Z", "key": "sk-sample-001", "project": "demo-app", "cost_usd": 20.00}
+{"id": "sample-evt-002", "timestamp": "2026-09-10T14:30:00Z", "key": "sk-sample-001", "project": "demo-app", "cost_usd": 26.00}
+{"id": "sample-evt-003", "timestamp": "2026-09-12T09:00:00Z", "key": "sk-sample-001", "project": "demo-app", "model": "gpt-4o-mini", "tokens_in": 1000000, "tokens_out": 100000}
+{"id": "sample-evt-004", "timestamp": "2026-09-15T18:00:00Z", "key": "sk-sample-002", "project": "demo-app", "cost_usd": 12.50}
+{"id": "sample-evt-005", "timestamp": "2026-09-20T12:00:00Z", "key": "sk-sample-003", "project": "demo-app", "tokens_in": 2000000, "tokens_out": 500000}
+{"id": "sample-evt-006", "timestamp": "2026-08-28T08:00:00Z", "key": "sk-sample-001", "project": "demo-app", "cost_usd": 999.00}
