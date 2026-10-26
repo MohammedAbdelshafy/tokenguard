@@ -2,29 +2,28 @@
 type: repository
 status: active
 owner_repo: MohammedAbdelshafy/tokenguard
-product_name: API Spend Limits
+product_name: API Budget Guard
 source_of_truth: https://github.com/MohammedAbdelshafy/tokenguard
 ---
 
-# API Spend Limits CONTEXT
+# API Budget Guard CONTEXT
 
-One job: compare recorded API usage with explicit budgets and report or block the guarded task when a limit is exceeded.
+One job: compare the usage records you provide with explicit budgets and make it possible for a workflow to stop when a configured limit is breached.
 
 ## Inputs
-- Commands/configuration: [README](README.md)
+- Commands, config and limitations: [README](README.md)
 - Implementation: [tokenguard](tokenguard/)
 - Tests: [tests](tests/)
-- Sample events and budgets: [samples](samples/)
 
 ## Process
-1. Load the configured budgets.
-2. Ingest usage records into the local ledger.
-3. Compare recorded spend with configured thresholds.
-4. Return a clear OK, ALERT or BREACH result.
-5. Allow the wrapper script or CI job to stop only when the configured guard is invoked.
+1. Load usage events and append only new events using the supported idempotency rules.
+2. Calculate costs using explicit costs or the configured price table.
+3. Compare totals with key/project/month budgets.
+4. Show warnings and breach status.
+5. Return the documented exit code so the parent script can decide whether to continue.
 
 ## Output
-Usage ledger entries, budget status and an exit code that can gate a command.
+A budget check with alerts and an exit status.
 
 ## Check
-Run the tests and sample events. Verify that a breached budget fails in the expected path. Do not claim that all provider spending is captured or blocked.
+Run tests for cost calculation, duplicate ingestion, malformed records and breached budgets. Do not claim that every provider charge is covered without a verified ingestion path.
