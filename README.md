@@ -1,7 +1,6 @@
 # API Spend Guard
 
-A small command-line tool that compares recorded API usage against budgets you set, prints warnings, and returns a failing exit code when a budget is exceeded so a script or CI job can stop.
-It works from usage records and a configured price table. It cannot guarantee that every provider charge is captured or that a hard stop prevents all spending.
+A small command-line tool for comparing recorded API usage against budgets you set. It can flag thresholds, report breaches and stop a guarded command when the configured budget rule is exceeded.
 
 Customer-facing name: **API Spend Guard**. The repository, package and command identifiers remain unchanged.
 
