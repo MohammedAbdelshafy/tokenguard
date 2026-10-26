@@ -1,6 +1,7 @@
-# API Spend Guard
+# API Spend Limits (TokenGuard)
 
-Set monthly spending limits for API keys and projects, record usage, get alerts when budgets are nearly reached, and stop a command when a configured limit has been exceeded. This tool enforces the budgets you set; it does not replace provider billing data or guarantee that all costs are captured.
+Set monthly spend limits for API keys and projects, record usage, and get an alert when a limit is close or exceeded. The command can also stop a script or CI job when the configured budget is over its limit.
+This checks the usage events you provide and the costs it can calculate from them. It cannot guarantee that every provider cost is captured or stop spending outside the guarded path.
 
 Customer-facing name: **API Spend Guard**. The repository, package and command identifiers remain unchanged.
 
