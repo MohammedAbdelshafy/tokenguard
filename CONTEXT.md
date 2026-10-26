@@ -2,11 +2,11 @@
 type: repository
 status: active
 owner_repo: MohammedAbdelshafy/tokenguard
-product_name: API Budget Guard
+product_name: TokenGuard
 source_of_truth: https://github.com/MohammedAbdelshafy/tokenguard
 ---
 
-# API Budget Guard CONTEXT
+# TokenGuard CONTEXT
 
 One job: compare the usage records you provide with explicit budgets and make it possible for a workflow to stop when a configured limit is breached.
 
