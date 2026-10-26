@@ -1,8 +1,8 @@
-# TokenGuard
+# API Spend Guard
 
-API spend guardrails: per-key / per-project monthly budgets, usage ingestion,
-threshold alerts, and a hard-stop enforcement hook. **Enforcement, not
-analytics.**
+Set monthly spending limits for API keys and projects, record usage, get alerts when budgets are nearly reached, and stop a command when a configured limit has been exceeded. This tool enforces the budgets you set; it does not replace provider billing data or guarantee that all costs are captured.
+
+Customer-facing name: **API Spend Guard**. The repository, package and command identifiers remain unchanged.
 
 How this differs from
 [token-dashboard](https://github.com/MohammedAbdelshafy/token-dashboard):
