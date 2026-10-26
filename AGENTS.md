@@ -1,8 +1,8 @@
-# API Spend Limits (TokenGuard)
+# API Budget Guard
 
-- Usage, commands and limits: [README.md](README.md)
+- Configuration and commands: [README.md](README.md)
 - Implementation: [tokenguard](tokenguard/)
 - Tests: [tests](tests/)
 - Project contract: [CONTEXT.md](CONTEXT.md)
 
-Keep TokenGuard as the technical alias, and preserve module/command names. Explain the limits of usage ingestion and enforcement; do not promise complete spend prevention.
+Use API Budget Guard in customer-facing copy. Keep the repository, package, CLI and config identifiers stable. Be explicit about which usage sources are monitored.
