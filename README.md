@@ -3,7 +3,7 @@
 A small command-line tool that compares recorded API usage against budgets you set. It can warn when spending gets close to a limit or return an error so a script or CI job can stop.
 It can only enforce the usage data and budgets configured for it. It does not guarantee that every provider cost is captured or every overrun is prevented.
 
-Customer-facing name: **API Spend Guard**. The repository, package and command identifiers remain unchanged.
+
 
 How this differs from
 [token-dashboard](https://github.com/MohammedAbdelshafy/token-dashboard):
